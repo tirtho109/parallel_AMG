@@ -1,6 +1,6 @@
 using SparseArrays
 using IterativeSolvers
-import IterativeSolvers: gauss_seidel!
+import IterativeSolvers: gauss_seidel!, jacobi!,jacobi
 
 # abstract type Smoother end
 # abstract type Sweep end
@@ -36,10 +36,26 @@ function gs!(x::PVector, A::PSparseMatrix, b::PVector, maxiter::Int) #, start, s
     # ranks = LinearIndices((length(A.row_partition),))
 
     # preconditioner
-    M_l1gs = extract_l1_gs_preconditioner(A)
+    #M_l1gs = extract_l1_gs_preconditioner(A)
 
-    map(own_values(x), own_values(M_l1gs), own_values(b)) do own_x, own_M_l1gs, own_b
-        gauss_seidel!(own_x, own_M_l1gs, own_b,maxiter=maxiter)   
+    map(local_values(x), local_values(A), own_values(b)) do local_x, local_A, own_b
+        #gauss_seidel!(own_x, own_M_l1gs, own_b,maxiter=maxiter) 
+        #own_x .=  0 
+        #own_x .= jacobi(local_A, own_b; maxiter=10)
+        res = zeros(size(own_b,1))
+        for i in 1:size(local_A, 1)
+            for j in 1:size(local_A,2)
+                if i!= j
+                    res[i]  -= local_A[i,j] * local_x[j]
+                end
+            end
+        end
+
+        res .+= own_b
+
+        for i in 1:size(local_A,1)
+            local_x[i] = res[i] / local_A[i,i]
+        end
     end
     consistent!(x) |> wait
     x
@@ -48,14 +64,16 @@ end
 function extract_l1_gs_preconditioner(A::PSparseMatrix)
     # ranks = LinearIndices((length(A.row_partition),))
 
-    IJV = map(A.row_partition, A.col_partition, own_values(A), local_values(A)) do rows, cols, own_A, local_A
+    IJV = map(A.row_partition, A.col_partition, local_values(A), own_ghost_values(A)) do rows, cols, own_A, ghost_A
         row = 0;
         row = minimum(own_to_global(rows))-1
         col = minimum(own_to_global(cols))-1
         I,J,V = Int[], Int[], Float64[]
-        B_k = sparse(own_A)
-        D_l1 = calculate_D(local_A)
-        B_k .= B_k .+ D_l1
+        #B_k = sparse(own_A)
+        B_k = own_A
+        #B_k = inv(B_k)
+        #D_l1 = calculate_D(ghost_A)
+        #B_k .= B_k .+ D_l1
         is, js, vs = findnz(B_k)
 
         is .+= row
@@ -84,7 +102,7 @@ function calculate_D(A)
 
     for i in 1:n
         row_sum = sum(abs.(A[i, :])) 
-        D[i, i] = row_sum  
+        D[i, i] = row_sum 
     end
     return D
 end
