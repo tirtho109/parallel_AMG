@@ -44,7 +44,7 @@ x = pzeros(eltype(b), A.col_partition)
 consistent!(x) |> wait
 
 # _solve!
-maxiter = 1
+maxiter = 10
 abstol = zero(real(eltype(b)))
 reltol = sqrt(eps(real(eltype(b))))
 log = false
@@ -60,31 +60,36 @@ log && push!(residuals, normb)
 res = ml.workspace.res_vecs[1]
 itr = lvl = 1
 
-# _solve!(cycle)
-A = ml.levels[lvl].A
-#try without smoother 
-ml.presmoother(A, x, b)
-res = ml.workspace.res_vecs[lvl]#
-mul!(res, A, x)
-res .= b .- res 
-coarse_b = ml.workspace.coarse_bs[lvl]
-mul!(coarse_b, ml.levels[lvl].R, res) 
-coarse_x = ml.workspace.coarse_xs[lvl]
-coarse_x .= 0
+while itr <= maxiter
+    # _solve!(cycle)
+    A = ml.levels[lvl].A
+    #try without smoother 
+    #@show x.vector_partition
+    #ml.presmoother(A, x, b)
+    #@show x.vector_partition
+    res = ml.workspace.res_vecs[lvl]#
+    mul!(res, A, x)
+    res .= b .- res 
+    coarse_b = ml.workspace.coarse_bs[lvl]
+    mul!(coarse_b, ml.levels[lvl].R, res) 
+    coarse_x = ml.workspace.coarse_xs[lvl]
+    coarse_x .= 0
 
-# as level == 1, we directly solve in coarse level.
-coarse_x_acc = accumulate_pvector(coarse_x)
-ml.coarse_solver(coarse_x_acc, accumulate_pvector(coarse_b))
-coarse_x = vec_to_pvec(coarse_x_acc, ml.levels[lvl].P)
+    # as level == 1, we directly solve in coarse level.
+    coarse_x_acc = accumulate_pvector(coarse_x)
+    ml.coarse_solver(coarse_x_acc, accumulate_pvector(coarse_b))
+    coarse_x = vec_to_pvec(coarse_x_acc, ml.levels[lvl].P)
 
-# interpolate solution
-coarse_x_new = PVector(coarse_x.vector_partition, ml.levels[lvl].P.col_partition)
-mul!(res, ml.levels[lvl].P, coarse_x_new) 
-x .+= res
-consistent!(x) |> wait
-@show x.vector_partition
-ml.postsmoother(A, x, b)
-@show x.vector_partition
+    # interpolate solution
+    coarse_x_new = PVector(coarse_x.vector_partition, ml.levels[lvl].P.col_partition)
+    mul!(res, ml.levels[lvl].P, coarse_x_new) 
+    x .+= res
+    consistent!(x) |> wait
+    @show x.vector_partition
+    ml.postsmoother(A, x, b)
+    @show x.vector_partition
+    global itr += 1
+end
 
 
 # Sol'n

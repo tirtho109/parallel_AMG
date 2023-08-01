@@ -10,7 +10,7 @@ using SparseArrays
 using PartitionedArrays
 #=
 using MPI 
-mpiexec(cmd->run(`$cmd -np 4 julia --project=. src\\Test\\transpose_psparse_test.jl`))
+mpiexec(cmd->run(`$cmd -np 4 julia --project=. src/Test/transpose_psparse_test.jl`))
 =#
 
 np = 4
@@ -50,8 +50,9 @@ end
 
 B = ppoisson(100)
 Bt = transpose_psparse(B)
+Btt = transpose_psparse(Bt)
 
-#check_symmetric(B)
+check_symmetric(B)
 
 
 

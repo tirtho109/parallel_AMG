@@ -1,6 +1,8 @@
 [deps]
 CommonSolve = "38540f10-b2f7-11e9-35d8-d573e4eb0ff2"
+IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MPITape = "0eb6d5be-9499-4b92-a3d2-b4957f471b2b"
 PartitionedArrays = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"

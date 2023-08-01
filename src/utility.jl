@@ -153,7 +153,11 @@ function find_dest_from_I(I,A)
     own_global = map(A.col_partition) do cols
         own_to_global(cols)
     end
+    map(own_global) do og
+        @show og
+    end
     all_own_global = gather(own_global, destination=:all)
+
 
     map(all_own_global,I) do all_og, I_loc
         dest = Vector{Int}([])
@@ -437,14 +441,18 @@ function create_x(A::PSparseMatrix, b::PVector)
     #consistent!(x) |> wait
 end
 
-function rhs_parabola(A::PSparseMatrix)
-    row_partition = A.row_partition
+function rhs_parabola(A::PSparseMatrix; cols = false)
+    if cols==true
+        row_partition = A.col_partition
+    else
+        row_partition = A.row_partition
+    end
     n = size(A,2)
     mid_index = div(n,2)+1
 
     IV = map(row_partition) do row_indices
         I,V = Int[], Float64[]
-        for global_row in local_to_global(row_indices)
+        for global_row in own_to_global(row_indices)
             push!(I, global_row)
             if global_row < mid_index  
                 push!(V, global_row - 1)

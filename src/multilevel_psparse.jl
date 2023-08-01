@@ -179,7 +179,7 @@ end
 
 function _solve!(x::PVector, ml::MultiLevel, b::PVector, # check type b
     cycle::Cycle = V();
-    maxiter::Int = 1,
+    maxiter::Int = 100,
     abstol::Real = zero(real(eltype(b))),
     reltol::Real = sqrt(eps(real(eltype(b)))),
     verbose::Bool = false,
