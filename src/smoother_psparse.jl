@@ -24,40 +24,35 @@ function (s::GaussSeidel{S})(A::PSparseMatrix, x::PVector, b::PVector) where {S<
    
     if S === ForwardSweep || S === SymmetricSweep || S === BackwardSweep
         #@show s.iter
-        gs!(x, A, b, s.iter)
+        gs_psparse!(x, A, b, s.iter)
     end
     x
 end
 
-
-function gs!(x::PVector, A::PSparseMatrix, b::PVector, maxiter::Int) #, start, step, stop)
+""""
+Aplly l₁ GS. Let  M_l1GS = M_HGS + Dₗ₁
+"""
+function gs_psparse!(x::PVector, A::PSparseMatrix, b::PVector, maxiter::Int)
     # preconditioner
-    #M_l1gs = extract_l1_gs_preconditioner(A)
-    M_l1gs = A
-    map(local_values(x), local_values(M_l1gs), own_values(b), own_values(x), ranks) do local_x, 
-                                                                                local_A, 
-                                                                                own_b, 
-                                                                                own_x, rank
+    M_l1gs = extract_l1_gs_preconditioner(A)
+    #M_l1gs = A
+    map(local_values(x), local_values(M_l1gs), own_values(b)) do local_x, 
+                                                                local_A, 
+                                                                own_b
         #iks = deepcopy(local_x) #need own x
         n = size(local_A, 1)
+        @show n, size(local_x,1)
         for iter in 1:maxiter
-            x_new = similar(local_x)  
             for i in 1:n
-                    # σ = 0.0 
-                    # for j in 1:n
-                    #     if j ≠ i
-                    #         σ += local_A[i, j] * local_x[j]
-                    #     end
-                    # end
-                    # x_temp[i] = (own_b[i] - σ) / local_A[i, i]
-                s1 = dot(local_A[i,1:i-1], x_new[1:i-1])
-                s2 = dot(local_A[i, i+1:end], local_x[i+1:end])
-                x_new[i] = (own_b[i] - s1 - s2) / local_A[i, i]
+                σ = 0.0 # σ == res[i]
+                for j in 1:size(local_A,2)
+                    if j ≠ i
+                        σ += local_A[i, j] * local_x[j]
+                    end
+                 end
+                local_x[i] = (own_b[i] - σ) / local_A[i, i]
             end
-            #@show iks, rank
-            for i in 1:n
-                local_x[i] = x_new[i]
-            end
+            @show iter, local_x
         end
         local_x
     end
@@ -77,7 +72,7 @@ function extract_l1_gs_preconditioner(A::PSparseMatrix)
         gg_cols = ghost_to_global(cols)
         i,j,v = findnz(sparse(ghost_A))
         j = gg_cols[j]
-         v .= 0.0
+        v .= 0.0
         append!(I, i.+row)
         append!(J, j)
         append!(V, v)
@@ -134,7 +129,45 @@ function jacobi_psparse!(x::PVector, A::PSparseMatrix, b::PVector, maxiter::Int)
             end
         end
         consistent!(x) |> wait
-        itr +=1 
+        #itr +=1 
     end
     x
 end
+
+
+"""
+function gs!(x::PVector, A::PSparseMatrix, b::PVector, maxiter::Int) #, start, step, stop)
+    # preconditioner
+    #M_l1gs = extract_l1_gs_preconditioner(A)
+    M_l1gs = A
+    map(local_values(x), local_values(M_l1gs), own_values(b), own_values(x), ranks) do local_x, 
+                                                                                local_A, 
+                                                                                own_b, 
+                                                                                own_x, rank
+        #iks = deepcopy(local_x) #need own x
+        n = size(local_A, 1)
+        for iter in 1:maxiter
+            x_new = similar(local_x)  
+            for i in 1:n
+                    # σ = 0.0 
+                    # for j in 1:n
+                    #     if j ≠ i
+                    #         σ += local_A[i, j] * local_x[j]
+                    #     end
+                    # end
+                    # x_temp[i] = (own_b[i] - σ) / local_A[i, i]
+                s1 = dot(local_A[i,1:i-1], x_new[1:i-1])
+                s2 = dot(local_A[i, i+1:end], local_x[i+1:end])
+                x_new[i] = (own_b[i] - s1 - s2) / local_A[i, i]
+            end
+            #@show iks, rank
+            for i in 1:n
+                local_x[i] = x_new[i]
+            end
+        end
+        local_x
+    end
+    consistent!(x) |> wait
+    x
+end
+"""
