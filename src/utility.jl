@@ -5,7 +5,6 @@ using PartitionedArrays
 create Poisson matrix using PartitionedArrays
 """
 function ppoisson(n::Int64)
-
     row_partition = uniform_partition(ranks,n) 
     in_partition_rows = map(row_partition) do rows
         global_rows = own_to_global(rows)
