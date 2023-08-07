@@ -25,6 +25,7 @@ function (s::GaussSeidel{S})(A::PSparseMatrix, x::PVector, b::PVector) where {S<
     if S === ForwardSweep || S === SymmetricSweep || S === BackwardSweep
         #@show s.iter
         gs_psparse!(x, A, b, s.iter)
+        #jacobi_psparse!(x,A,b,s.iter)
     end
     x
 end
@@ -34,29 +35,50 @@ Aplly l₁ GS. Let  M_l1GS = M_HGS + Dₗ₁
 """
 function gs_psparse!(x::PVector, A::PSparseMatrix, b::PVector, maxiter::Int)
     # preconditioner
+    # x_bar = A*x
+    # consistent!(x_bar) |> wait
+
     M_l1gs = extract_l1_gs_preconditioner(A)
     #M_l1gs = A
-    map(local_values(x), local_values(M_l1gs), own_values(b)) do local_x, 
-                                                                local_A, 
-                                                                own_b
-        #iks = deepcopy(local_x) #need own x
-        n = size(local_A, 1)
-        @show n, size(local_x,1)
-        for iter in 1:maxiter
-            for i in 1:n
-                σ = 0.0 # σ == res[i]
-                for j in 1:size(local_A,2)
-                    if j ≠ i
-                        σ += local_A[i, j] * local_x[j]
+    for iter in 1:maxiter
+        delx = pzeros(x.index_partition)
+        map(local_values(delx), local_values(M_l1gs), own_values(b-A*x), own_values(A), own_values(x),local_values(A)) do local_delx, 
+                                                                    local_M, 
+                                                                    own_r, own_A, own_x, ori_local_A
+            
+            n = size(local_M, 1)
+            #@show n, size(local_x,1)
+                for i in 1:size(local_M, 1)
+                    σ = 0.0 # σ == res[i]
+                    for j in 1:size(local_M,2)
+                        if j ≠ i
+                            σ += local_M[i, j] * local_delx[j]
+                        end
                     end
-                 end
-                local_x[i] = (own_b[i] - σ) / local_A[i, i]
-            end
-            @show iter, local_x
+                    local_delx[i] = (own_r[i] - σ) / local_M[i, i]
+                end
+            local_delx
         end
-        local_x
+        x .+= delx
+        consistent!(x) |> wait
+        
+        map(local_values(A), local_values(x), own_values(b)) do local_A, local_x, own_b
+            # res = []
+            # for i in 1:size(local_A, 1)
+            #     σ = 0.0 # σ == res[i]
+            #     for j in 1:size(local_A,2)
+            #         σ += local_A[i, j] * local_x[j]
+            #     end
+            #     #local_x[i] = (own_b[i] - σ) / local_A[i, i]
+            #     push!(res, own_b[i] - σ)
+            # end
+            #     #@show norm(ori_local_A * local_x - own_b)
+            # @show norm(res)
+            # @show norm(local_A * local_x - own_b)
+
+        end
+        @show norm(M_l1gs * x - b)
     end
-    consistent!(x) |> wait
     x
 end
 

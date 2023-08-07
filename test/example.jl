@@ -1,11 +1,7 @@
-include("../utility.jl")
-include("../myConstants.jl")
-include("../classical_psparse.jl")
-include("../matmatmul_helper.jl")
-include("../multilevel_psparse.jl")
+import ParallelAMG: ppoisson, ruge_stuben
 
 np = 2
-n = 20
+n = 6
 #const ranks = distribute_with_mpi(LinearIndices((np,)))
 const ranks = LinearIndices((np,))
 
@@ -20,7 +16,7 @@ end
 g = GaussSeidel()
 x = pzeros(A.col_partition)
 
-for i in 1:10
+for i in 1:100
     # map(local_values(x)) do x_local
     #     @show x_local
     # end

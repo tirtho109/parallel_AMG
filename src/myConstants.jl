@@ -18,7 +18,7 @@ struct GaussSeidel{S} <: Smoother
     iter::Int
 end
 
-GaussSeidel(; iter = 10) = GaussSeidel(SymmetricSweep(), iter)
+GaussSeidel(; iter = 1) = GaussSeidel(SymmetricSweep(), iter)
 GaussSeidel(f::ForwardSweep) = GaussSeidel(f, 1)
 GaussSeidel(b::BackwardSweep) = GaussSeidel(b, 1)
 GaussSeidel(s::SymmetricSweep) = GaussSeidel(s, 1)

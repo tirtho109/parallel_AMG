@@ -14,13 +14,16 @@ using MPI
 mpiexec(cmd->run(`$cmd -np 4 julia --project=. src/Test/example_problem.jl`))
 =#
 
-np = 2
-n = 6
+np = 3
+n = 100
 #const ranks = distribute_with_mpi(LinearIndices((np,)))
 const ranks = LinearIndices((np,))
 
 A = ppoisson(n)
-b = rhs_parabola(A)
+x_sol = rhs_parabola(A;cols=true)
+
+b = A*x_sol
+
 
 ml = ruge_stuben(A;max_coarse=2, max_levels=2)
 """
@@ -40,7 +43,8 @@ Level     Unknowns     NonZeros
 n = length(ml) == 1 ? size(ml.final_A, 1) : size(ml.levels[1].A, 1)
 A = length(ml) == 1 ? ml.final_A : ml.levels[1].A
 v = promote_type(eltype(ml.workspace), eltype(b))
-x = pzeros(eltype(b), A.col_partition)
+#x = pzeros(eltype(b), A.col_partition)
+x = x_sol
 consistent!(x) |> wait
 
 # _solve!
@@ -65,9 +69,9 @@ while itr <= maxiter
     A = ml.levels[lvl].A
     #try without smoother 
     #@show x.vector_partition
-    #ml.presmoother(A, x, b)
+    ml.presmoother(A, x, b)
     #@show x.vector_partition
-    res = ml.workspace.res_vecs[lvl]#
+    res = ml.workspace.res_vecs[lvl]
     mul!(res, A, x)
     res .= b .- res 
     coarse_b = ml.workspace.coarse_bs[lvl]
