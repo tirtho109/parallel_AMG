@@ -235,4 +235,40 @@ function RS_CF_splitting_inner(S::SparseMatrixCSC, T::SparseMatrixCSC)
 		end
 	end
 	splitting
+
+	# Pass 2
+	f_set = findall(x -> x == F_NODE, splitting)
+	c_set = findall(x -> x == C_NODE, splitting)
+
+	for i in f_set
+		si = Int64[]
+		for j in nzrange(S,i)
+			push!(si, S.rowval[j])
+		end
+		siT = Int64[]
+		for j in nzrange(T,i)
+			push!(siT, T.rowval[j])
+		end
+		# @show js = intersect(si, intersect(siT, f_set))
+		js = si ∩ siT ∩ f_set
+		#@show isempty(js)
+		if isempty(js)
+			continue
+		else
+			for j in js
+				sj = Int64[]
+				for ptr in nzrange(S,j)
+					push!(sj, S.rowval[ptr])
+				end
+				#intersection = intersect(si, intersect(sj, c_set))
+				intersection = si ∩ sj ∩ c_set
+				#@show intersection
+				if isempty(intersection)
+					splitting[j] = C_NODE
+					#@show splitting
+				end
+			end
+		end
+	end
+	splitting
 end
