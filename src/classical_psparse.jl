@@ -15,7 +15,7 @@ function ruge_stuben(_A::TA,
                     postsmoother = GaussSeidel(),
                     max_levels = 10,
                     max_coarse = 10,
-                    coarse_solveer = Pinv, kwargs...) where {TA<:PSparseMatrix}
+                    coarse_solver = Pinv, kwargs...) where {TA<:PSparseMatrix}
     A = _A
     levels = Vector{Level{TA,TA,TA}}()
 
@@ -33,7 +33,7 @@ function ruge_stuben(_A::TA,
         residual!(w, A.row_partition)
     end
 
-    MultiLevel(levels, A, coarse_solveer(A), presmoother, postsmoother, w)
+    MultiLevel(levels, A, coarse_solver(A), presmoother, postsmoother, w)
 end
 
 
