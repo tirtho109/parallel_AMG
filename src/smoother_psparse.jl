@@ -34,7 +34,7 @@ Aplly l₁ GS. Let  M_l1GS = M_HGS + Dₗ₁
 """
 function gs_psparse!(x::PVector, A::PSparseMatrix, b::PVector, maxiter::Int)
 
-    M_l1gs = extract_l1_gs_preconditioner(A)
+    M_l1gs = extract_l1_gs_smoother(A)
 
     for iter in 1:maxiter
         delx = pzeros(x.index_partition)    # initial guess
@@ -65,7 +65,7 @@ function gs_psparse!(x::PVector, A::PSparseMatrix, b::PVector, maxiter::Int)
     x
 end
 
-function extract_l1_gs_preconditioner(A::PSparseMatrix)
+function extract_l1_gs_smoother(A::PSparseMatrix)
 
     IJV = map(partition(axes(A,1)), partition(axes(A,2)), own_values(A), own_ghost_values(A)) do rows, cols, own_A, ghost_A
         row = 0;
