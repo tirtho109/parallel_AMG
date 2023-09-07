@@ -12,15 +12,17 @@ using MPITape
 using MPI
 #=
 using MPI 
-mpiexec(cmd->run(`$cmd -np 3 julia --project=. src/Test/matmul_mRnRmAnAmPnP_test.jl`))
+mpiexec(cmd->run(`$cmd -np 6 julia --project=. src/Test/matmul_mRnRmAnAmPnP_test.jl`))
 =#
 
-np = 3
-n = 500
+np = 6
+n = 5000
 const ranks = distribute_with_mpi(LinearIndices((np,)))
 rank = MPI.Comm_rank(MPI.COMM_WORLD)
-@show rank
+#@show rank
 #const ranks = LinearIndices((np,))
+t = PTimer(ranks)
+tic!(t)
 
 A = ppoisson(n);
 
@@ -87,22 +89,23 @@ map(ranks) do rank
     end
 end
 
-# P6,R6 = create_PR(A6);
-# A7 = mat_mul(R6, mat_mul(A6,P6))
+P6,R6 = create_PR(A6);
+A7 = mat_mul(R6, mat_mul(A6,P6))
 
 
 # # P3,R3 = create_PR(A3);
 # # A4 = mat_mul(R3, mat_mul(A3,P3))
 
-# map(ranks) do rank
-#     if rank==1
-#         @show size(A), size(A2), size(A3), size(A4), size(A5), size(A6), size(A7)
-#     end
-# end
+map(ranks) do rank
+    if rank==1
+        @show size(A), size(A2), size(A3), size(A4), size(A5), size(A6), size(A7)
+    end
+end
 
 
 
-
+toc!(t,"Sleep")
+display(t)
 
 
 

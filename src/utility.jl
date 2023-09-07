@@ -153,7 +153,7 @@ function find_dest_from_I(I,A)
         own_to_global(cols)
     end
     map(own_global) do og
-        @show og
+        # @show og
     end
     all_own_global = gather(own_global, destination=:all)
 
@@ -167,7 +167,7 @@ function find_dest_from_I(I,A)
                 end
             end
         end
-        @show dest
+        # @show dest
         dest
     end
 end
@@ -183,7 +183,7 @@ function get_remote_IJVD(I,J,V,dest)
         V_send_buffer = Vector{Vector{Float64}}([])
         destination = Vector{Int}([])
         unique_dest = unique(dest_rank)
-        @show I_rank, J_rank, V_rank, dest_rank
+        # @show I_rank, J_rank, V_rank, dest_rank
         for ud in unique_dest
             Is, Js, Vs = Int[], Int[], Float64[]
                 positions = findall(x -> x == ud, dest_rank)
@@ -303,7 +303,7 @@ function extract_IJV(A::PSparseMatrix)
 
         global_rows = local_to_global_rows[local_rows]
         global_cols = local_to_global_cols[local_cols]
-        #@show global_rows, global_cols
+        # @show global_rows, global_cols
         for (i,j,v) in zip(global_rows, global_cols, values)
             push!(I, i)
             push!(J, j)
@@ -419,9 +419,9 @@ function rhs(A::PSparseMatrix)
         I,V = Int[], Float64[]
         for global_row in local_to_global(row_indices)
             if global_row == 1
-                v = 10.0
+                v = 1.0
             elseif global_row == n
-                v = -5.0
+                v = 1.0
             else
                 continue
             end

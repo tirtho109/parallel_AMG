@@ -48,7 +48,20 @@ abstract type CoarseSolver end
 struct Pinv{T} <: CoarseSolver
     pinvA::Matrix{T}
     #Pinv{T}(A) where T = new{T}(pinv(Matrix(A))) #need to make dense in 1 partition
-    Pinv{T}(A) where T = new{T}(pinv(accumulate_psparse(A,type=Matrix)))
+    # Pinv{T}(A) where T = new{T}(pinv(accumulate_psparse(A,type=Matrix)))
+    function Pinv{T}(A) where T
+        At = deepcopy(A)
+        A_accumulated = accumulate_psparse2(At, type=Matrix)
+        out = map(A_accumulated, ranks) do a, rank
+            if rank == 1
+                new{T}(pinv(a))
+            else
+                0
+            end
+        end
+        return out
+    end
+    
 end
 Pinv(A) = Pinv{eltype(A)}(A)
 Base.show(io::IO, p::Pinv) = print(io, "Pinv")
@@ -185,7 +198,12 @@ function _solve!(x::PVector, ml::MultiLevel, b::PVector, # check type b
     verbose::Bool = false,
     log::Bool = false,
     calculate_residual = true, kwargs...) where {T}
-
+    
+    # map(ranks) do rank
+    #     if rank == 1
+    #         @show ml.coarse_solver[rank].pinvA
+    #     end
+    # end
     A = length(ml) == 1 ? ml.final_A : ml.levels[1].A
 
     v = promote_type(eltype(A), eltype(b))
@@ -242,28 +260,35 @@ function __solve!(x, ml, cycle::Cycle, b, lvl)
 
     # cureent level 
     res = ml.workspace.res_vecs[lvl]
-    mul!(res, A, x) #initialize: res.vector_partition = A.row_partition, but! x.index_partition == A.col_partition
-    #reshape(res, size(b)) .= b .- reshape(res, size(b))
-    res .= b .- res     # b.index_partition == res.index_partition
+    mul!(res, A, x) 
+    res .= b .- res  
 
-    # need to check whether we need to change res.index_partition to R.col_partition
     coarse_b = ml.workspace.coarse_bs[lvl]
-    mul!(coarse_b, ml.levels[lvl].R, res)  # res.index_partition == A.row_partition == R.col_partition
-                                           # b.index_partition == R.row_partition
+    mul!(coarse_b, ml.levels[lvl].R, res)  
 
-    coarse_x = ml.workspace.coarse_xs[lvl] # coarse_x = P.col_partition
+    coarse_x = ml.workspace.coarse_xs[lvl] 
     coarse_x .= 0
     if lvl == length(ml.levels)
-        coarse_x_acc = accumulate_pvector(coarse_x)
-        ml.coarse_solver(coarse_x_acc, accumulate_pvector(coarse_b))
-        coarse_x = vec_to_pvec(coarse_x_acc, ml.levels[lvl].P)
+        # Coarse Solver
+        coarse_x = accumulate_pvector(coarse_x)
+        coarse_b = accumulate_pvector(coarse_b)
+        coarse_A = deepcopy(A)
+        coarse_A = accumulate_psparse2(coarse_A)
+        map(ranks, coarse_x, coarse_b, ml.coarse_solver) do rank, cx, cb, mcs
+            if rank == MAIN
+                o = mul!(cx, mcs.pinvA, cb)
+            else
+                o = 0
+            end
+            o
+        end
+        # Share result from MAIN partition to :all and make PVector
+        coarse_x = vec_to_pvec(coarse_x, ml.levels[lvl].P)
     else
-        coarse_x = __solve_next!(coarse_x, ml, cycle, coarse_b, lvl + 1) #__solve!(x, ml, cycle::Cycle, b, lvl)
+        coarse_x = __solve_next!(coarse_x, ml, cycle, coarse_b, lvl + 1)
     end
-    #@show lvl
     coarse_x_new = PVector(coarse_x.vector_partition, ml.levels[lvl].P.col_partition)
-    mul!(res, ml.levels[lvl].P, coarse_x_new) # P.col_partition == coarse_x.index_partition
-    #mul!(ml.workspace.res_vecs[lvl], ml.levels[lvl].P, coarse_x)
+    mul!(res, ml.levels[lvl].P, coarse_x_new) 
     x .+= res
 
     ml.postsmoother(A, x, b)
@@ -272,35 +297,35 @@ function __solve!(x, ml, cycle::Cycle, b, lvl)
 end
 
 
-function vec_to_pvec(x::Vector, P::PSparseMatrix)
-
-    IV = map(partition(axes(P,2))) do cols
-        I,V = Int[], Float64[]
-        for global_col in own_to_global(cols)  
+function vec_to_pvec(vec, P::PSparseMatrix)
+    vec = emit(vec, source=MAIN)   
+    IV = map(vec, P.col_partition) do cvec, cols
+        I, V = Int[], Float64[]
+        indices_and_values = [(index, value) for (index, value) in enumerate(cvec)]
+        for global_col in own_to_global(cols)
             push!(I, global_col)
-            push!(V, x[global_col])
+            push!(V, indices_and_values[global_col][2])
         end
         I,V
     end
-    I,V = tuple_of_arrays(IV)
-    out = pvector!(I,V, P.col_partition) |> fetch
-    consistent!(out);
-    return out
+    I,value = tuple_of_arrays(IV)
+    vec = pvector!(I,value,P.col_partition) |> fetch
+    consistent!(vec) |>wait
+    return vec
 end
 
 
 ### CommonSolve.jl spec
 struct AMGSolver{T}
     ml::MultiLevel
-    b::Vector{T}
+    b::PVector{T}
 end
 
 abstract type AMGAlg end
 
 struct RugeStubenAMG  <: AMGAlg end
-#struct SmoothedAggregationAMG  <: AMGAlg end
 
-function solve(A::AbstractMatrix, b::Vector, s::AMGAlg, args...; kwargs...)
+function solve(A::PSparseMatrix, b::PVector, s::AMGAlg, args...; kwargs...)
     solt = init(s, A, b, args...; kwargs...)
     solve!(solt, args...; kwargs...)
 end
@@ -314,23 +339,35 @@ end
 
 ##################### Helpers ##########################
 
-function accumulate_psparse(A::PSparseMatrix; type::Type = SparseMatrixCSC)
+# accumulate PSparseMatrix in ALL partition
+function accumulate_psparse2(A::PSparseMatrix; type::Type = SparseMatrixCSC)
     Is, Js, Vs = extract_IJV(A)
+    I = gather(Is, destination=:all)
+    J = gather(Js, destination=:all)
+    Value = gather(Vs, destination=:all)
     mA, nA = size(A)
-    if type == SparseMatrixCSC
-        return sparse(vcat(Is...), vcat(Js...), vcat(Vs...), mA, nA)
-    elseif type == Matrix
-        return Matrix(sparse(vcat(Is...), vcat(Js...), vcat(Vs...), mA, nA))
-    else
-        throw(ArgumentError("Invalid type argument."))
+    out = map(ranks, I, J, Value) do rank, i, j, v
+        i = vcat(i...)
+        j = vcat(j...)
+        v = vcat(v...)
+        if type == SparseMatrixCSC
+            o = sparse(i,j,v, mA, nA)
+        elseif type == Matrix
+            o = Matrix(sparse(i, j, v, mA, nA))
+        end
+        o
     end
+    return out
 end
 
-#accumulate pvector into 1 partition
+# accumulate pvector into ALL partition
 function accumulate_pvector(b::PVector)
-    out = map(own_values(b)) do own
-        # b_loc = own_values(b)[rank]
+    own_vals = map(own_values(b)) do own
         own
     end
-    return vcat(out...)
+    own_vals = gather(own_vals, destination=:all) 
+    out = map(own_vals) do ov
+        vcat(ov...)
+    end
+    return out 
 end

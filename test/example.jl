@@ -1,4 +1,4 @@
-import ParallelAMG: ppoisson, ruge_stuben
+#import ParallelAMG: ppoisson, ruge_stuben
 
 np = 2
 n = 6
