@@ -3,9 +3,8 @@ using SparseArrays
 include("utility.jl")
 
 """
-    In PartitionedArrays distributed local matrices are SparseMatrixCSC
-    So, we cal culate transpose of the S matrix first then 
-    transpose back to Strength matrix(S).
+    In PartitionedArrays distributed local matrices are SparseMatrixCSC.
+    So, we cal culcuate transpose of the S matrix first, then transpose back to Strength matrix(S).
     Communication needed to calculate maximum in shared cols.
     [send_ghost_max -> compare_with_own_max -> select_the_final_max -> send_back_max_to_the_ghost_col]
     Ref: Pyamg: abs(aᵢⱼ) > θ × max(abs(aᵢₖ)), where i ≠ k 
@@ -17,13 +16,6 @@ include("utility.jl")
 
 function (c::Classical)(A::PSparseMatrix; Symmetric::Bool=true) where {Ti, Tv}
     θ = c.θ
-    mA, nA = size(A)
-
-    in_partition_cols = map(A.col_partition) do cols #changed
-        global_cols = own_to_global(cols)
-        length(global_cols)
-    end  
-    col_partition = variable_partition(in_partition_cols, sum(in_partition_cols))
 
     T = deepcopy(A)
     Offdiag_max_in_shared_cols = get_set_of_max_in_shared_columns(T, "offdiag")
@@ -198,7 +190,7 @@ function get_set_of_max_in_shared_columns(S::PSparseMatrix, type::String)
         # check for shared cols maximum 
         for k in eachindex(e_owner)
             in_partition_col_group = Int[]
-            in_partition_max_group = Int[]
+            in_partition_max_group = Float64[]
             for (c_max, col) in zip(e_max[k], e_col[k])
                 m = 0.0
                 if type == "all"
@@ -253,4 +245,5 @@ function get_set_of_max_in_shared_columns(S::PSparseMatrix, type::String)
         end
         R
     end 
+    local_set
 end
