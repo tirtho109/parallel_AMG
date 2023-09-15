@@ -51,7 +51,7 @@ struct Pinv{T} <: CoarseSolver
     # Pinv{T}(A) where T = new{T}(pinv(accumulate_psparse(A,type=Matrix)))
     function Pinv{T}(A) where T
         At = deepcopy(A)
-        A_accumulated = accumulate_psparse2(At, type=Matrix)
+        A_accumulated = accumulate_psparse(At, type=Matrix)
         out = map(A_accumulated, ranks) do a, rank
             if rank == 1
                 new{T}(pinv(a))
@@ -88,7 +88,7 @@ function Base.show(io::IO, ml::MultiLevel)
             nonzLA = nonz(level.A)
             rows = size(level.A, 1)
             map(ranks, nonzLA, total_nnz) do rank, nonLA, tot_nnz
-                if(rank==1)
+                if(rank==MAIN)
                     lstr = lstr *
                         @sprintf "   %2d   %10d   %10d [%5.2f%%]\n" i rows nonLA (100 * nonLA / tot_nnz)
                 end
@@ -98,16 +98,16 @@ function Base.show(io::IO, ml::MultiLevel)
     nnzfinalA = nonz(ml.final_A)
     final_rows = size(ml.final_A,1)
     map(ranks, nnzfinalA, total_nnz) do rank, nzfinalA, tot_nnz
-        if(rank == 1)
+        if(rank == MAIN)
             lstr = lstr *
                 @sprintf "   %2d   %10d   %10d [%5.2f%%]" length(ml.levels) + 1 final_rows nzfinalA (100 * nzfinalA / tot_nnz)
                                                                                     # may not need to change, final_A == Dense
         end
     end
     opround = map(op) do o
-            round(o, digits = 3)
+            round(o, digits = 5)
         end
-    ground = round(g, digits = 3)
+    ground = round(g, digits =5)
 
     map(ranks, opround) do rank, ops
         if(rank == 1)
@@ -273,7 +273,7 @@ function __solve!(x, ml, cycle::Cycle, b, lvl)
         coarse_x = accumulate_pvector(coarse_x)
         coarse_b = accumulate_pvector(coarse_b)
         coarse_A = deepcopy(A)
-        coarse_A = accumulate_psparse2(coarse_A)
+        coarse_A = accumulate_psparse(coarse_A)
         map(ranks, coarse_x, coarse_b, ml.coarse_solver) do rank, cx, cb, mcs
             if rank == MAIN
                 o = mul!(cx, mcs.pinvA, cb)
@@ -340,7 +340,7 @@ end
 ##################### Helpers ##########################
 
 # accumulate PSparseMatrix in ALL partition
-function accumulate_psparse2(A::PSparseMatrix; type::Type = SparseMatrixCSC)
+function accumulate_psparse(A::PSparseMatrix; type::Type = SparseMatrixCSC)
     Is, Js, Vs = extract_IJV(A)
     I = gather(Is, destination=:all)
     J = gather(Js, destination=:all)
